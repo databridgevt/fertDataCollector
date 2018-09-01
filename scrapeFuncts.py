@@ -3,9 +3,9 @@ from selenium import webdriver
 import urlList
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import pickle
 import time
-
+import dateparser
+import re
 #Gathers URLs for fertilizer trends and then extracts information from table within those pages
 
 # will need to replace chromedriver.exe for appropriate per operating system
@@ -43,7 +43,7 @@ def gspreadAuth():
          'https://www.googleapis.com/auth/drive']
 	credentials = ServiceAccountCredentials.from_json_keyfile_name('creds.json', scope)
 	gc = gspread.authorize(credentials)
-	wks = gc.open_by_url("https://docs.google.com/spreadsheets/d/1iEwsC2vCy8QuRvTtZyRzSdkpeTcpgCRtHgFsObaMlHA/edit#gid=0")
+	wks = gc.open_by_url("https://docs.google.com/spreadsheets/d/1Bfj6mn4O4v7_wU7M3W3SYX3Sv_lOoefmSeoIiJmLSAM/edit#gid=0")
 	ws = wks.get_worksheet(0)
 	return ws
 
@@ -53,6 +53,20 @@ def gspreadAuth():
 def next_available_row(sheet):
 	str_list = list(filter(None, sheet.col_values(1)))  # fastest
 	return len(str_list)
+
+def fixDate(dateStr):
+	#original string x[0]
+	#start date x[1]
+	#end x[2]
+	x = [dateStr, '','']
+	splitStr = dateStr.split('-')
+	x[1] = dateparser.parse(splitStr[0] + ' ' + dateStr.split(' ')[-1]).strftime("%m/%d/%Y")
+	if re.search('[a-zA-Z]', splitStr[1]) is None:
+		x[2] = dateparser.parse(splitStr[0].split(' ')[0] + ' ' + splitStr[1]).strftime("%m/%d/%Y")
+	else:
+		x[2] = dateparser.parse(splitStr[1]).strftime("%m/%d/%Y")
+	return x
+
 
 #table json break list in half liquid and dry so can upload to drive across
 if __name__ == "__main__":
@@ -79,11 +93,13 @@ if __name__ == "__main__":
 				split = data.index(['Liquid'])
 			dryData = data[:split] 
 			liquidData = data[split:]
-			dateCol = ws.col_values(3)
+			dateCol = ws.col_values(1)
 			for x,y in zip(dryData, liquidData):
 				if len(x[0])>11 and x[0] not in dateCol:
 					count = count+1;
-					ws.append_row([x[0].split()[-1], x[0].split()[0], x[0],x[1],x[2],x[3],x[4],y[1],y[2],y[3],y[4]])
+					date = fixDate(x[0])
+					#ws.append_row([date[0], date[1], date[2],x[1],x[2],x[3],x[4],y[1],y[2],y[3],y[4]])
+					ws.append_row([date[0], date[1], date[2],x[1],x[2],x[3],x[4],y[1],y[2],y[3],y[4]],value_input_option='USER_ENTERED')
 		else:
 			print(link , "in URL list, skipping")
 		print("Added" ,str(count) ,"values from " , link)
@@ -94,4 +110,6 @@ if __name__ == "__main__":
 	with open('urlList.py', 'w') as file:
 		file.write('urlList = ')
 		file.write(str(urlList.urlList))
+	#write time to sheet 
+	ws.update_acell('N4',  time.strftime("%Y-%m-%d %H:%M"))
 	print("Program complete added", totals,"values")
